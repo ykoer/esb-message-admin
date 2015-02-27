@@ -31,10 +31,7 @@ import org.esbtools.message.admin.spi.Provider;
 public class EsbMessageAdminServiceImpl implements Provider {
 
     @PersistenceContext(unitName = "EsbMessageAdminErrorPU")
-    private EntityManager errorEntityMgr;
-
-    @PersistenceContext(unitName = "EsbMessageAdminMetadataPU")
-    private EntityManager metadataEntityMgr;
+    private EntityManager entityMgr;
 
     transient EsbErrorDAO errorDao;
     transient MetadataDAO metadataDao;
@@ -42,25 +39,21 @@ public class EsbMessageAdminServiceImpl implements Provider {
     transient static KeyExtractorUtil extractor;
     transient static boolean isMapdirty = false;
 
-    private EsbErrorDAO getErrorDAO() {
-        return errorDao == null ? new EsbErrorDAOImpl(errorEntityMgr) : errorDao;
+    void setEntityManager(EntityManager entityMgr) {
+        this.entityMgr = entityMgr;
     }
 
-    void setErrorEntityManager(EntityManager entityMgr) {
-        this.errorEntityMgr = entityMgr;
+    private EsbErrorDAO getErrorDAO() {
+        return errorDao == null ? new EsbErrorDAOImpl(entityMgr) : errorDao;
     }
 
     private MetadataDAO getMetadataDAO() {
-        return metadataDao == null ? new MetadataDAOImpl(metadataEntityMgr) : metadataDao;
-    }
-    
-    // TODO: inject DAO
-    private AuditEventDAO getAuditEventDAO() {
-        return auditEventDAO == null ? new AuditEventDAOImpl(errorEntityMgr) : auditEventDAO;
+        return metadataDao == null ? new MetadataDAOImpl(entityMgr) : metadataDao;
     }
 
-    void setMetadataEntityManager(EntityManager entityMgr) {
-        this.metadataEntityMgr = entityMgr;
+    // TODO: inject DAO
+    private AuditEventDAO getAuditEventDAO() {
+        return auditEventDAO == null ? new AuditEventDAOImpl(entityMgr) : auditEventDAO;
     }
 
     private KeyExtractorUtil getKeyExtractor() {
@@ -149,6 +142,6 @@ public class EsbMessageAdminServiceImpl implements Provider {
     // ------------------ Audit methods ---------------------------
 
     public void audit(AuditEvent event) {
-    	getAuditEventDAO().save(AuditEventEntity.convert(event));
+        getAuditEventDAO().save(AuditEventEntity.convert(event));
     }
 }

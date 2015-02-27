@@ -267,6 +267,50 @@ public class MetadataDAOImpl implements MetadataDAO {
         return suggestions;
     }
 
+    public void addSearchKeyValueSuggestions(Map<String, List<String>> extractedHeaders) {
+        for (String header : extractedHeaders.keySet()) {
+            if (getHeadersWithSuggestedValues().contains(header)) {
+                // get id of the search key so we can append add the suggestions as childs
+                MetadataField searchKeyField = fetchMetadataField(null, header,  MetadataType.SearchKey);
+                for (String suggestion : extractedHeaders.get(header)) {
+                    if (!childExists(searchKeyField.getId(), suggestion, MetadataType.Suggestion)) {
+                        addChildMetadataField(searchKeyField.getId(), suggestion, MetadataType.Suggestion, suggestion);
+                    }
+                }
+            }
+        }
+    }
+
+    private MetadataField fetchMetadataField(Long parentId, String name, MetadataType type) {
+        MetadataField result = null;
+        Query query = mgr.createQuery("select f from MetadataEntity f where f.name = :name and f.type = :type " + (parentId != null ? " and f.parentId = :parentId" : ""));
+        query.setParameter("name", name);
+        query.setParameter("type", type);
+        if (parentId != null) {
+            query.setParameter("parentId", parentId);
+        }
+
+        List<MetadataEntity> queryResult = (List<MetadataEntity>) query.getResultList();
+        if (queryResult != null && queryResult.size() != 0) {
+            result = ConversionUtility.convertToMetadataField(queryResult.get(0));
+        }
+        return result;
+    }
+
+    private boolean childExists(Long parentId, String name, MetadataType type) {
+        MetadataField result = null;
+        Query query = mgr.createQuery("select count(f) from MetadataEntity f where f.parentId = :parentId and f.name = :name and f.type = :type");
+        query.setParameter("parentId", parentId);
+        query.setParameter("name", name);
+        query.setParameter("type", type);
+        long count = (long)query.getSingleResult();
+        if (count > 0) {
+           return true;
+        } else {
+            return false;
+        }
+    }
+
     private Set<String> getHeadersWithSuggestedValues() {
         return new HashSet<String>(Arrays.asList(config.getProperty("headersWithSuggestedValues").split(",")));
     }

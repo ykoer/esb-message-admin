@@ -35,12 +35,11 @@ import org.esbtools.message.admin.service.orm.EsbMessageHeaderEntity;
 
 public class EsbErrorDAOImpl implements EsbErrorDAO {
 
-    private final EntityManager mgr;
     private final static Logger log = Logger.getLogger(EsbErrorDAOImpl.class.getName());
-
     private static final String MESSAGE_PROPERTY_PAYLOAD_HASH = "esbPayloadHash";
-
     private Properties config;
+    private final EntityManager mgr;
+    private MetadataDAO metadataDao;
 
     public EsbErrorDAOImpl(EntityManager mgr) {
         this.mgr=mgr;
@@ -55,11 +54,16 @@ public class EsbErrorDAOImpl implements EsbErrorDAO {
         }
     }
 
+    private MetadataDAO getMetadataDAO() {
+        return metadataDao == null ? new MetadataDAOImpl(mgr) : metadataDao;
+    }
+
     /**
      * {@inheritDoc}
      */
     public void create(EsbMessageEntity eme, KeyExtractorUtil extractor) {
 
+        // extract headers from the payload
         try {
             Map<String, List<String>> extractedHeaders = extractor.getEntriesFromPayload(eme.getPayload());
             for (Entry<String, List<String>> headerSet : extractedHeaders.entrySet()) {
@@ -72,6 +76,10 @@ public class EsbErrorDAOImpl implements EsbErrorDAO {
                     eme.getErrorHeaders().add(extractedHeader);
                 }
             }
+
+             // insert extracted headers into metadata table for autocompletion support
+            getMetadataDAO().addSearchKeyValueSuggestions(extractedHeaders);
+
         } catch (KeyExtractorException e) {
             log.warning("Could not extract metadata! " + e);
         }

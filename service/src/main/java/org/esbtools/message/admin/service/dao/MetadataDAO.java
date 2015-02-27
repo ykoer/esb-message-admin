@@ -13,6 +13,7 @@ package org.esbtools.message.admin.service.dao;
 import java.util.List;
 import java.util.Map;
 
+import org.esbtools.message.admin.model.MetadataField;
 import org.esbtools.message.admin.model.MetadataResponse;
 import org.esbtools.message.admin.model.MetadataType;
 
@@ -44,6 +45,11 @@ public interface MetadataDAO {
      * fetch suggestions for search keys and values ( for some of the keys )
      */
     public Map<String, List<String>> getSearchKeyValueSuggestions();
+
+    /**
+     * add new suggestions to the search keys meta data, if they don't exist
+     */
+    void addSearchKeyValueSuggestions(Map<String, List<String>> extractedHeaders);
 
     /**
      * sync an entity by enqueuing a JMS request

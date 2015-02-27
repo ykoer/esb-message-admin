@@ -1,10 +1,12 @@
 package org.esbtools.message.admin.service;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
 import javax.persistence.Query;
 
+import org.esbtools.message.admin.model.EsbMessage;
 import org.esbtools.message.admin.model.MetadataField;
 import org.esbtools.message.admin.model.MetadataResponse;
 import org.esbtools.message.admin.model.MetadataType;
@@ -53,7 +55,7 @@ public class MetadataServiceTest extends EsbMessageAdminTestBase {
 
     private MetadataField fetchMetadataField(String name, String value, MetadataType type) {
         MetadataField result = null;
-        Query query = getMetadataEntityManager().createQuery("select f from MetadataEntity f where f.name = :name and f.type = :type and f.value = :value");
+        Query query = getEntityManager().createQuery("select f from MetadataEntity f where f.name = :name and f.type = :type and f.value = :value");
         query.setParameter("name", name);
         query.setParameter("type", type);
         query.setParameter("value", value);
@@ -197,7 +199,7 @@ public class MetadataServiceTest extends EsbMessageAdminTestBase {
     public void childWithMissingParentTest() {
         // ensure that having a child without a parent does not throw NPE
         MetadataEntity entity = new MetadataEntity(MetadataType.Entity, "missingParent", "missingParent", 3L);
-        getMetadataEntityManager().persist(entity);
+        getEntityManager().persist(entity);
         MetadataResponse result = service.getMetadataTree(MetadataType.Entities);
     }
 
@@ -226,6 +228,91 @@ public class MetadataServiceTest extends EsbMessageAdminTestBase {
         suggestionList = suggestions.get("SourceSystem");
         Assert.assertEquals("SourceSystem should have 1 suggestion!", 1, suggestionList.size());
         Assert.assertEquals("suggestion2", suggestionList.get(0));
+    }
+
+    @Test
+    public void addSuggestionsToMetadataTest() {
+
+        String payload =
+                "<Person>\n" +
+                "    <Id>12345</Id>\n" +
+                "    <SourceSystem>SystemA</SourceSystem>\n" +
+                "    <References>\n" +
+                "        <Id system=\"SystemB\">4532</Id>\n" +
+                "        <Id system=\"SystemC\">1532</Id>\n" +
+                "    </References>\n" +
+                "    <FirstName>John</FirstName>\n" +
+                "    <LastName>Doe</LastName>\n" +
+                "    <Email confirmed=\"true\">john.doe@example.com</Email>\n" +
+                "    <Addresses>\n" +
+                "        <Address type=\"Private\">\n" +
+                "            <Line>123 Main St</Line>\n" +
+                "            <City>Anytown</City>\n" +
+                "            <State>AS</State>\n" +
+                "            <Country>US</Country>\n" +
+                "            <ZIP>98765</ZIP>\n" +
+                "        </Address>\n" +
+                "        <Address type=\"Work\">\n" +
+                "            <Line>Strasse 123</Line>\n" +
+                "            <City>Stadt</City>\n" +
+                "            <Country>DE</Country>\n" +
+                "            <ZIP>12345</ZIP>\n" +
+                "        </Address>\n" +
+                "    </Addresses>\n" +
+                "</Person>";
+
+        long id = -1L;
+        service.addChildMetadataField(id, "SearchKeys", MetadataType.SearchKeys, "suggestionsTest");
+        MetadataField searchKeys = fetchMetadataField("SearchKeys", "suggestionsTest", MetadataType.SearchKeys);
+
+        service.addChildMetadataField(searchKeys.getId(), "Email", MetadataType.SearchKey, "suggestionLessKey");
+        MetadataField suggestionLessKey = fetchMetadataField("Email", "suggestionLessKey", MetadataType.SearchKey);
+        service.addChildMetadataField(suggestionLessKey.getId(), "", MetadataType.XPATH, "/Person/Email[@confirmed='true']");
+
+        service.addChildMetadataField(searchKeys.getId(), "SourceSystem", MetadataType.SearchKey, "SourceSystem");
+        MetadataField sourceSystem = fetchMetadataField("SourceSystem", "SourceSystem", MetadataType.SearchKey);
+        service.addChildMetadataField(sourceSystem.getId(), "", MetadataType.XPATH, "/Person/SourceSystem");
+        service.addChildMetadataField(sourceSystem.getId(), "SystemB", MetadataType.Suggestion, "SystemB");
+
+        service.addChildMetadataField(searchKeys.getId(), "Country", MetadataType.SearchKey, "Country");
+        MetadataField country = fetchMetadataField("Country", "Country", MetadataType.SearchKey);
+        service.addChildMetadataField(country.getId(), "", MetadataType.XPATH, "/Person/Addresses/Address/Country");
+        //
+
+        // SystemA suggestion should not exist yet
+        MetadataField systemASuggestion = fetchMetadataField("SystemA", "SystemA", MetadataType.Suggestion);
+        Assert.assertNull(systemASuggestion);
+
+        // SystemB suggestion should already exist
+        MetadataField systemBSuggestion = fetchMetadataField("SystemB", "SystemB", MetadataType.Suggestion);
+        Assert.assertNotNull(systemBSuggestion);
+
+        // persist message and check suggestion again
+        try {
+            EsbMessage message = new EsbMessage();
+            message.setPayload(payload);
+            service.persist(message);
+        } catch (IOException e) {
+            Assert.fail();
+        }
+
+        // suggestion=SystemA should be added since SourceSystem's values can be suggested
+        systemASuggestion = fetchMetadataField("SystemA", "SystemA", MetadataType.Suggestion);
+        Assert.assertNotNull(systemASuggestion);
+        Assert.assertEquals("SystemA", systemASuggestion.getName());
+
+        systemBSuggestion = fetchMetadataField("SystemB", "SystemB", MetadataType.Suggestion);
+        Assert.assertNotNull(systemBSuggestion);
+        Assert.assertEquals("SystemB", systemBSuggestion.getName());
+
+        MetadataField emailSuggestion = fetchMetadataField("Email", "Email", MetadataType.Suggestion);
+        Assert.assertNull(emailSuggestion);
+
+        // County codes can not be suggested
+        MetadataField countryUsSuggestion = fetchMetadataField("US", "US", MetadataType.Suggestion);
+        Assert.assertNull(countryUsSuggestion);
+        MetadataField countryDeSuggestion = fetchMetadataField("DE", "DE", MetadataType.Suggestion);
+        Assert.assertNull(countryDeSuggestion);
     }
 
     private void assertSuccess(MetadataResponse result) {
